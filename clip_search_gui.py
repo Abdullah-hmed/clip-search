@@ -2,7 +2,7 @@ import sys
 import os
 import hashlib
 import torch
-import clip
+import open_clip
 from PIL import Image
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QPushButton,
@@ -27,9 +27,11 @@ def best_device():
 # Adding/removing/changing individual files only re-encodes those.
 # ──────────────────────────────────────────────────────────────
 class EmbeddingCache:
+    MODEL_TAG = "openclip-vit-l-14"   # bump this if you ever change models
+
     def __init__(self, folder: str):
         h = hashlib.md5(folder.encode()).hexdigest()[:8]
-        self._path = os.path.join(folder, f".clip_cache_{h}.pt")
+        self._path = os.path.join(folder, f".clip_cache_{self.MODEL_TAG}_{h}.pt")
         self._data: dict = {}   # key → 1-D cpu tensor
         self._load()
 
@@ -409,8 +411,11 @@ class ClipSearcher(QWidget):
     def __init__(self):
         super().__init__()
         self.device = best_device()
-        print(f"Loading CLIP model on {self.device}…")
-        self.model, self.preprocess = clip.load("ViT-L/14", device=self.device)
+        print(f"Loading OpenCLIP ViT-L/14 on {self.device}…")
+        self.model, _, self.preprocess = open_clip.create_model_and_transforms(
+            "ViT-L-14", pretrained="laion2b_s32b_b82k", device=self.device
+        )
+        self.tokenizer = open_clip.get_tokenizer("ViT-L-14")
         self.model.eval()
 
         self.folder_path = None
@@ -551,7 +556,7 @@ class ClipSearcher(QWidget):
         threshold = self.threshold_slider.value() / 100.0
 
         with torch.no_grad():
-            text_emb = self.model.encode_text(clip.tokenize(prompt).to(self.device))
+            text_emb = self.model.encode_text(self.tokenizer([prompt]).to(self.device))
             text_emb /= text_emb.norm(dim=-1, keepdim=True)
             text_emb  = text_emb.cpu()
 
@@ -571,6 +576,7 @@ class ClipSearcher(QWidget):
         )
 
 
+# ──────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     win = ClipSearcher()
