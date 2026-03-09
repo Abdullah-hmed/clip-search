@@ -1,3 +1,4 @@
 clip
+open_clip_torch
 pillow
 numpy
